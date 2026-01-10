@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pyramid Health Tracker v5 (With Alerts)</title>
+    <style>
+        :root {
+            --bg-color: #f4f7f6;
+            --card-bg: #ffffff;
+            --primary: #2ecc71;
+            --danger: #e74c3c;
+            --warning: #e67e22;
+            --text: #2c3e50;
+            --accent-92: #f1c40f;
+            --accent-plate: #3498db;
+            --accent-rfk: #9b59b6;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text);
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 700px;
+            background: var(--card-bg);
+            padding: 30px;
+            border-radius: 20px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            text-align: center;
+            margin-top: 0;
+        }
+
+        h2 {
+            font-size: 1.2rem;
+            opacity: 0.7;
+            margin-bottom: 20px;
+        }
+
+        /* --- ALERT BOX STYLES --- */
+        #global-alert-box {
+            background-color: #fee2e2;
+            border: 2px solid var(--danger);
+            color: #b91c1c;
+            padding: 15px;
+            border-radius: 12px;
+            margin-bottom: 25px;
+            display: none;
+            /* Hidden by default */
+            animation: slideIn 0.3s ease;
+        }
+
+        .alert-title {
+            font-weight: bold;
+            font-size: 1.1rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 5px;
+        }
+
+        .alert-list {
+            margin: 0;
+            padding-left: 20px;
+        }
+
+        .alert-list li {
+            margin-bottom: 4px;
+        }
+
+        /* --- SEARCH & INPUTS --- */
+        .search-container {
+            position: relative;
+            margin-bottom: 20px;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 15px;
+            border: 2px solid #ddd;
+            border-radius: 10px;
+            font-size: 1.1rem;
+            outline: none;
+            transition: border 0.3s;
+        }
+
+        input[type="text"]:focus {
+            border-color: var(--primary);
+        }
+
+        #suggestions {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            width: 100%;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 0 0 10px 10px;
+            max-height: 200px;
+            overflow-y: auto;
+            z-index: 100;
+            display: none;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .suggestion-item {
+            padding: 12px;
+            cursor: pointer;
+            border-bottom: 1px solid #eee;
+        }
+
+        .suggestion-item:hover {
+            background-color: #f9f9f9;
+        }
+
+        #meal-list {
+            list-style: none;
+            padding: 0;
+            margin-bottom: 30px;
+        }
+
+        .meal-item {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr 0.5fr;
+            gap: 10px;
+            align-items: center;
+            background: #f8f9fa;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 12px;
+            border-left: 5px solid var(--primary);
+        }
+
+        .food-name {
+            font-weight: bold;
+            color: #34495e;
+        }
+
+        .row-input {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            width: 100%;
+        }
+
+        .remove-btn {
+            color: var(--danger);
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 1.2rem;
+            text-align: center;
+        }
+
+        /* --- BUTTONS --- */
+        .submit-btn,
+        .restart-btn {
+            width: 100%;
+            padding: 15px;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 1.2rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .submit-btn:hover {
+            background: #27ae60;
+        }
+
+        /* --- RESULTS --- */
+        #results-screen {
+            display: none;
+        }
+
+        .score-card {
+            background: #fff;
+            border: 2px solid #eee;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            position: relative;
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 15px;
+        }
+
+        .score-circle {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: white;
+            flex-shrink: 0;
+        }
+
+        .rec-box {
+            background-color: #f8f9fa;
+            border-radius: 10px;
+            padding: 15px;
+            font-size: 0.95rem;
+            color: #555;
+            border-left: 4px solid #ccc;
+        }
+
+        .rec-title {
+            font-weight: bold;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        /* Model Colors */
+        .model-92 {
+            border-color: var(--accent-92);
+        }
+
+        .model-92 .score-circle {
+            background: var(--accent-92);
+        }
+
+        .model-plate {
+            border-color: var(--accent-plate);
+        }
+
+        .model-plate .score-circle {
+            background: var(--accent-plate);
+        }
+
+        .model-rfk {
+            border-color: var(--accent-rfk);
+        }
+
+        .model-rfk .score-circle {
+            background: var(--accent-rfk);
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container" id="input-screen">
+        <h1>🍽️ Meal Builder</h1>
+        <h2>Add food items</h2>
+
+        <div class="search-container">
+            <input type="text" id="food-input" placeholder="Type food (e.g., Steak, Rice, Soda)...">
+            <div id="suggestions"></div>
+        </div>
+
+        <ul id="meal-list"></ul>
+        <button class="submit-btn" onclick="analyzeMeal()">Analyze Health Score</button>
+    </div>
+
+    <div class="container" id="results-screen">
+
+        <div id="global-alert-box">
+            <div class="alert-title">⚠️ HEALTH WARNING</div>
+            <ul class="alert-list" id="alert-content"></ul>
+        </div>
+
+        <h1>📊 The Verdict</h1>
+
+        <div class="score-card model-92">
+            <div class="card-header">
+                <h3>1992 Pyramid</h3>
+                <div class="score-circle" id="score-92">0%</div>
+            </div>
+            <div class="rec-box" id="rec-92"></div>
+        </div>
+
+        <div class="score-card model-plate">
+            <div class="card-header">
+                <h3>MyPlate (2011)</h3>
+                <div class="score-circle" id="score-plate">0%</div>
+            </div>
+            <div class="rec-box" id="rec-plate"></div>
+        </div>
+
+        <div class="score-card model-rfk">
+            <div class="card-header">
+                <h3>RFK / Upside Down</h3>
+                <div class="score-circle" id="score-rfk">0%</div>
+            </div>
+            <div class="rec-box" id="rec-rfk"></div>
+        </div>
+
+        <button class="restart-btn" onclick="resetApp()">Build New Meal</button>
+    </div>
+
+    <script>
+        // --- DATA ---
+        const foodDatabase = [
+            { name: "Apple", category: "fruit", processed: false },
+            { name: "Banana", category: "fruit", processed: false },
+            { name: "Steak", category: "protein", processed: false },
+            { name: "Chicken Breast", category: "protein", processed: false },
+            { name: "White Bread", category: "grain", processed: true },
+            { name: "Whole Wheat Bread", category: "grain", processed: false },
+            { name: "Pasta", category: "grain", processed: true },
+            { name: "Broccoli", category: "veg", processed: false },
+            { name: "Carrots", category: "veg", processed: false },
+            { name: "Milk", category: "dairy", processed: false },
+            { name: "Raw Milk", category: "dairy", processed: false, special: "rfk_bonus" },
+            { name: "Cheese", category: "dairy", processed: true },
+            { name: "Soda", category: "sweet", processed: true },
+            { name: "Candy Bar", category: "sweet", processed: true },
+            { name: "Butter", category: "fat", processed: false },
+            { name: "Beef Tallow", category: "fat", processed: false, special: "rfk_bonus" },
+            { name: "Vegetable Oil", category: "seed_oil", processed: true },
+            { name: "French Fries", category: "veg", processed: true, cooked_in: "seed_oil" },
+            { name: "Eggs", category: "protein", processed: false },
+            { name: "Rice", category: "grain", processed: false }
+        ];
+
+        let currentMeal = [];
+        const CONVERSIONS = { 'g': 1, 'oz': 28, 'lb': 453, 'cup': 200, 'srv': 150 };
+
+        // --- UI LOGIC ---
+        const input = document.getElementById('food-input');
+        const suggestionsBox = document.getElementById('suggestions');
+        const mealList = document.getElementById('meal-list');
+
+        input.addEventListener('input', (e) => {
+            const val = e.target.value.toLowerCase();
+            suggestionsBox.innerHTML = '';
+            if (val.length < 1) { suggestionsBox.style.display = 'none'; return; }
+            const matches = foodDatabase.filter(food => food.name.toLowerCase().includes(val));
+            if (matches.length > 0) {
+                suggestionsBox.style.display = 'block';
+                matches.forEach(food => {
+                    const div = document.createElement('div');
+                    div.className = 'suggestion-item';
+                    div.textContent = food.name;
+                    div.onclick = () => addFood(food);
+                    suggestionsBox.appendChild(div);
+                });
+            } else suggestionsBox.style.display = 'none';
+        });
+
+        function addFood(food) {
+            currentMeal.push({ ...food, amount: 1, unit: 'srv' });
+            input.value = ''; suggestionsBox.style.display = 'none'; renderList();
+        }
+
+        function removeFood(index) { currentMeal.splice(index, 1); renderList(); }
+        function updateItem(index, field, value) { currentMeal[index][field] = value; }
+
+        function renderList() {
+            mealList.innerHTML = '';
+            currentMeal.forEach((item, index) => {
+                const li = document.createElement('li');
+                li.className = 'meal-item';
+                li.innerHTML = `
+                    <div class="food-name">${item.name}</div>
+                    <input type="number" class="row-input" value="${item.amount}" min="0.1" step="0.5" onchange="updateItem(${index}, 'amount', parseFloat(this.value))">
+                    <select class="row-input" onchange="updateItem(${index}, 'unit', this.value)">
+                        <option value="srv" ${item.unit === 'srv' ? 'selected' : ''}>srv</option>
+                        <option value="g" ${item.unit === 'g' ? 'selected' : ''}>g</option>
+                        <option value="oz" ${item.unit === 'oz' ? 'selected' : ''}>oz</option>
+                        <option value="lb" ${item.unit === 'lb' ? 'selected' : ''}>lb</option>
+                        <option value="cup" ${item.unit === 'cup' ? 'selected' : ''}>cup</option>
+                    </select>
+                    <div class="remove-btn" onclick="removeFood(${index})">✕</div>
+                `;
+                mealList.appendChild(li);
+            });
+        }
+
+        // --- ANALYSIS ENGINE ---
+        function analyzeMeal() {
+            if (currentMeal.length === 0) { alert("Add food first!"); return; }
+
+            // 1. Calculate Weights
+            let totalGrams = 0;
+            let weights = { grain: 0, veg: 0, fruit: 0, protein: 0, dairy: 0, fat: 0, sweet: 0, seed_oil: 0, rfk_bonus: 0 };
+
+            currentMeal.forEach(item => {
+                const grams = (parseFloat(item.amount) || 0) * CONVERSIONS[item.unit];
+                totalGrams += grams;
+                if (weights[item.category] !== undefined) weights[item.category] += grams;
+                if (item.cooked_in === 'seed_oil') weights.seed_oil += grams * 0.2;
+                if (item.special === 'rfk_bonus') weights.rfk_bonus += grams;
+            });
+            if (totalGrams === 0) totalGrams = 1;
+
+            // --- GLOBAL HEALTH ALERTS ---
+            // These run BEFORE scores. If you eat 10 steaks, this triggers.
+            const alerts = [];
+
+            // Limit: > 600g Protein (Approx 1.3 lbs or 4-5 servings)
+            if (weights.protein > 600) {
+                alerts.push(`🥩 <b>Extreme Protein:</b> You entered over ${(weights.protein / 453).toFixed(1)} lbs of meat. Kidney strain likely.`);
+            }
+
+            // Limit: > 100g Sugar (Approx 2.5 cans of soda)
+            if (weights.sweet > 100) {
+                alerts.push(`🍬 <b>Sugar Overload:</b> Over 100g of sweets detected. High diabetes risk.`);
+            }
+
+            // Limit: > 30g Seed Oil
+            if (weights.seed_oil > 30) {
+                alerts.push(`🛢️ <b>Inflammatory Oil:</b> Very high seed oil content detected.`);
+            }
+
+            // Limit: > 150g Fat (Approx 1.3 sticks of butter)
+            if (weights.fat > 150) {
+                alerts.push(`🧈 <b>Extreme Fat:</b> Over 150g of fat in one meal.`);
+            }
+
+            // Show Alerts
+            const alertBox = document.getElementById('global-alert-box');
+            const alertContent = document.getElementById('alert-content');
+            alertContent.innerHTML = "";
+
+            if (alerts.length > 0) {
+                alertBox.style.display = "block";
+                alerts.forEach(msg => {
+                    const li = document.createElement("li");
+                    li.innerHTML = msg;
+                    alertContent.appendChild(li);
+                });
+            } else {
+                alertBox.style.display = "none";
+            }
+
+            // --- MODEL CALCULATIONS ---
+            const p = {};
+            for (let key in weights) p[key] = weights[key] / totalGrams;
+
+            // 1992
+            let score92 = 80;
+            let advice92 = [];
+            if (p.grain > 0.3) { score92 += 20; advice92.push("Great grain base."); }
+            else advice92.push("Eat more grains (Bread/Pasta).");
+            if (p.fat > 0.05) { score92 -= (p.fat * 300); advice92.push("Too much fat."); }
+            setResult('92', score92, advice92);
+
+            // MyPlate
+            let platePoints = 0;
+            let advicePlate = [];
+            const plantPct = p.veg + p.fruit;
+            platePoints += (Math.min(plantPct, 0.5) / 0.5) * 50;
+            if (plantPct < 0.4) advicePlate.push("Need more fruits/veggies.");
+
+            const protPct = p.protein + p.dairy;
+            platePoints += (Math.min(protPct, 0.25) / 0.25) * 25;
+
+            const grainPct = p.grain;
+            platePoints += (Math.min(grainPct, 0.25) / 0.25) * 25;
+            if (grainPct < 0.2) advicePlate.push("Add whole grains.");
+
+            if (p.sweet > 0) platePoints -= 10;
+            setResult('plate', platePoints, advicePlate);
+
+            // RFK
+            let scoreRFK = 90;
+            let adviceRFK = [];
+            if (p.seed_oil > 0) { scoreRFK -= (p.seed_oil * 1000); adviceRFK.push("Contains Seed Oils!"); }
+            if (p.sweet > 0) { scoreRFK -= (p.sweet * 200); adviceRFK.push("Avoid sugar."); }
+            if (p.rfk_bonus > 0) { scoreRFK += 10; adviceRFK.push("Good Tallow/Raw Milk."); }
+            else adviceRFK.push("Use Tallow/Butter/Raw Milk.");
+            setResult('rfk', scoreRFK, adviceRFK);
+
+            // Switch Screen
+            document.getElementById('input-screen').style.display = 'none';
+            document.getElementById('results-screen').style.display = 'block';
+        }
+
+        function setResult(id, score, adviceArray) {
+            const finalScore = Math.min(100, Math.max(0, Math.round(score)));
+            document.getElementById(`score-${id}`).innerText = finalScore + "%";
+            const recBox = document.getElementById(`rec-${id}`);
+            if (adviceArray.length === 0) recBox.innerHTML = "No recommendations.";
+            else recBox.innerHTML = `<span class="rec-title">Tips:</span>` + adviceArray.map(msg => `• ${msg}`).join('<br>');
+        }
+
+        function resetApp() {
+            currentMeal = []; renderList();
+            document.getElementById('input-screen').style.display = 'block';
+            document.getElementById('results-screen').style.display = 'none';
+            document.getElementById('global-alert-box').style.display = 'none';
+        }
+    </script>
+</body>
+
+</html>
