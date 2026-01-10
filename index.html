@@ -4,15 +4,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>67 Pomodoro Timer with Hands</title>
+    <title>6 7 Pomodoro</title>
     <style>
         :root {
-            --study-color: #ff6b6b;
-            /* Red for Focus */
-            --break-color: #4ecdc4;
-            /* Teal for Break */
             --bg-color: #2f3542;
             --text-color: #ffffff;
+            --study-color: #ff6b6b;
+            /* Red text for study */
+            --break-color: #4ecdc4;
+            /* Teal text for break */
         }
 
         body {
@@ -20,73 +20,94 @@
             color: var(--text-color);
             font-family: 'Courier New', Courier, monospace;
             display: flex;
+            flex-direction: column;
+            /* Stack Title above content */
             justify-content: center;
             align-items: center;
             height: 100vh;
             margin: 0;
-            transition: background-color 0.5s ease;
+            overflow: hidden;
+        }
+
+        /* --- TITLE STYLING --- */
+        h1 {
+            font-size: 3rem;
+            text-transform: uppercase;
+            letter-spacing: 5px;
+            margin-bottom: 50px;
+            /* Space between title and hands */
+            text-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+            z-index: 20;
         }
 
         .main-layout {
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 20px;
+            gap: 50px;
+        }
+
+        /* Wrapper to hold image and overlaid text */
+        .hand-wrapper {
+            position: relative;
+            width: 300px;
+            height: auto;
+            /* ANIMATION SETTINGS */
+            transition: transform 0.6s cubic-bezier(0.68, -0.55, 0.27, 1.55), opacity 0.5s ease, filter 0.5s;
+
+            /* INACTIVE STATE (Pushed down) */
+            opacity: 0.4;
+            filter: grayscale(100%);
+            transform: translateY(100px) scale(0.9);
+        }
+
+        /* NEUTRAL STATE (Even on start) */
+        .hand-wrapper.neutral {
+            opacity: 1;
+            filter: grayscale(0%);
+            transform: translateY(20px) scale(1);
+        }
+
+        /* ACTIVE STATE (Pulled up) */
+        .hand-wrapper.active {
+            opacity: 1;
+            filter: grayscale(0%);
+            transform: translateY(-50px) scale(1.1);
         }
 
         .hand-image {
-            width: 200px;
+            width: 100%;
             height: auto;
-            opacity: 0.8;
-            transition: opacity 0.5s ease;
-            display: none;
-            /* Hidden by default */
-        }
-
-        .hand-image.visible {
             display: block;
         }
 
-        /* Mirror the second hand image */
-        #hand-up {
-            transform: scaleX(-1);
+        /* The Timer Text Overlay */
+        .timer-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 3.5rem;
+            font-weight: 900;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+            pointer-events: none;
         }
 
-        .container {
-            text-align: center;
-            background: rgba(255, 255, 255, 0.1);
-            padding: 3rem;
-            border-radius: 20px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-            width: 350px;
+        /* Specific colors for specific timers */
+        #study-wrapper .timer-text {
+            color: var(--study-color);
         }
 
-        h1 {
-            margin-bottom: 0.5rem;
-            font-size: 1.5rem;
-            opacity: 0.8;
+        #break-wrapper .timer-text {
+            color: var(--break-color);
         }
 
-        #mode-label {
-            font-size: 2rem;
-            font-weight: bold;
-            text-transform: uppercase;
-            letter-spacing: 5px;
-            margin-bottom: 1rem;
-            display: block;
-        }
-
-        #timer {
-            font-size: 6rem;
-            font-weight: bold;
-            margin: 1rem 0;
-            font-variant-numeric: tabular-nums;
-        }
-
-        .btn-group {
+        /* The Middle Control Panel */
+        .controls {
             display: flex;
-            gap: 10px;
-            justify-content: center;
+            flex-direction: column;
+            gap: 20px;
+            z-index: 10;
         }
 
         button {
@@ -95,17 +116,14 @@
             font-size: 1.2rem;
             border-radius: 50px;
             cursor: pointer;
-            transition: transform 0.1s, opacity 0.2s;
             font-weight: bold;
             color: var(--bg-color);
+            background-color: #dfe4ea;
+            transition: transform 0.1s;
         }
 
         button:active {
             transform: scale(0.95);
-        }
-
-        button:hover {
-            opacity: 0.9;
         }
 
         #start-btn {
@@ -116,124 +134,122 @@
             background-color: #ffa502;
             display: none;
         }
-
-        #reset-btn {
-            background-color: #dfe4ea;
-        }
-
-        /* Dynamic Classes for Modes */
-        body.study-mode {
-            background-color: #2f3542;
-        }
-
-        body.study-mode #mode-label {
-            color: var(--study-color);
-        }
-
-        body.break-mode {
-            background-color: #1e3799;
-        }
-
-        body.break-mode #mode-label {
-            color: var(--break-color);
-        }
     </style>
 </head>
 
-<body class="study-mode">
+<body>
+
+    <h1>6 7 Pomodoro</h1>
 
     <div class="main-layout">
-        <img id="hand-down" class="hand-image" src="image_0.png" alt="Hand Down">
 
-        <div class="container">
-            <h1>6/7 Timer</h1>
-            <span id="mode-label">Study Time</span>
-
-            <div id="timer">06:00</div>
-
-            <div class="btn-group">
-                <button id="start-btn" onclick="startTimer()">Start</button>
-                <button id="pause-btn" onclick="pauseTimer()">Pause</button>
-                <button id="reset-btn" onclick="resetTimer()">Reset</button>
-            </div>
+        <div id="study-wrapper" class="hand-wrapper neutral">
+            <img class="hand-image" src="handori.png" alt="Study Hand">
+            <div class="timer-text" id="study-timer">00:06</div>
         </div>
 
-        <img id="hand-up" class="hand-image" src="image_1.png" alt="Hand Up">
+        <div class="controls">
+            <button id="start-btn" onclick="startTimer()">Start</button>
+            <button id="pause-btn" onclick="pauseTimer()">Pause</button>
+            <button id="reset-btn" onclick="resetTimer()">Reset</button>
+        </div>
+
+        <div id="break-wrapper" class="hand-wrapper neutral">
+            <img class="hand-image" src="handflip.png" alt="Break Hand">
+            <div class="timer-text" id="break-timer">00:07</div>
+        </div>
+
     </div>
 
     <script>
         // --- CONFIGURATION ---
-        const STUDY_MINUTES = 6;
-        const BREAK_MINUTES = 7;
+        const STUDY_TIME_SECONDS = 6;
+        const BREAK_TIME_SECONDS = 7;
 
         // --- STATE ---
-        let timeLeft = STUDY_MINUTES * 60;
+        let currentMode = 'study';
+        let studySeconds = STUDY_TIME_SECONDS;
+        let breakSeconds = BREAK_TIME_SECONDS;
         let timerInterval = null;
         let isRunning = false;
-        let currentMode = 'study'; // 'study' or 'break'
+        let hasStarted = false;
 
         // --- DOM ELEMENTS ---
-        const timerDisplay = document.getElementById('timer');
-        const modeLabel = document.getElementById('mode-label');
+        const studyDisplay = document.getElementById('study-timer');
+        const breakDisplay = document.getElementById('break-timer');
+        const studyWrapper = document.getElementById('study-wrapper');
+        const breakWrapper = document.getElementById('break-wrapper');
         const startBtn = document.getElementById('start-btn');
         const pauseBtn = document.getElementById('pause-btn');
-        const body = document.body;
-        const handDown = document.getElementById('hand-down');
-        const handUp = document.getElementById('hand-up');
 
-        // --- FUNCTIONS ---
+        // --- HELPERS ---
+        function formatTime(totalSeconds) {
+            const m = Math.floor(totalSeconds / 60);
+            const s = totalSeconds % 60;
+            return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+        }
 
-        function updateDisplay() {
-            const minutes = Math.floor(timeLeft / 60);
-            const seconds = timeLeft % 60;
-            const displayStr = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-            timerDisplay.textContent = displayStr;
-            document.title = `(${displayStr}) 6/7 Timer`;
+        function updateUI() {
+            // Update Text
+            studyDisplay.textContent = formatTime(studySeconds);
+            breakDisplay.textContent = formatTime(breakSeconds);
 
-            // Show/hide hands based on mode
-            if (currentMode === 'study') {
-                handDown.classList.add('visible');
-                handUp.classList.remove('visible');
-            } else {
-                handDown.classList.remove('visible');
-                handUp.classList.add('visible');
+            // VISUAL STATE LOGIC
+            if (!hasStarted) {
+                // Neutral Start: Both even
+                studyWrapper.className = 'hand-wrapper neutral';
+                breakWrapper.className = 'hand-wrapper neutral';
+            }
+            else if (currentMode === 'study') {
+                // Study Active: Left HIGH, Right LOW
+                studyWrapper.className = 'hand-wrapper active';
+                breakWrapper.className = 'hand-wrapper';
+            }
+            else {
+                // Break Active: Left LOW, Right HIGH
+                studyWrapper.className = 'hand-wrapper';
+                breakWrapper.className = 'hand-wrapper active';
             }
         }
 
+        // --- TIMER LOGIC ---
         function switchMode() {
             if (currentMode === 'study') {
                 currentMode = 'break';
-                timeLeft = BREAK_MINUTES * 60;
-                modeLabel.textContent = "Break Time";
-                body.className = "break-mode";
-                alert("Study Complete! Take 7 minutes.");
+                studySeconds = STUDY_TIME_SECONDS;
             } else {
                 currentMode = 'study';
-                timeLeft = STUDY_MINUTES * 60;
-                modeLabel.textContent = "Study Time";
-                body.className = "study-mode";
-                alert("Break Over! Back to work.");
+                breakSeconds = BREAK_TIME_SECONDS;
             }
-            updateDisplay();
+            updateUI();
         }
 
         function startTimer() {
             if (isRunning) return;
 
+            hasStarted = true;
             isRunning = true;
+
             startBtn.style.display = 'none';
             pauseBtn.style.display = 'inline-block';
 
+            updateUI(); // Trigger animation immediately
+
             timerInterval = setInterval(() => {
-                if (timeLeft > 0) {
-                    timeLeft--;
-                    updateDisplay();
+                if (currentMode === 'study') {
+                    if (studySeconds > 0) {
+                        studySeconds--;
+                    } else {
+                        switchMode();
+                    }
                 } else {
-                    clearInterval(timerInterval);
-                    isRunning = false;
-                    switchMode();
-                    startTimer();
+                    if (breakSeconds > 0) {
+                        breakSeconds--;
+                    } else {
+                        switchMode();
+                    }
                 }
+                updateUI();
             }, 1000);
         }
 
@@ -246,16 +262,16 @@
 
         function resetTimer() {
             pauseTimer();
-            if (currentMode === 'study') {
-                timeLeft = STUDY_MINUTES * 60;
-            } else {
-                timeLeft = BREAK_MINUTES * 60;
-            }
-            updateDisplay();
+            studySeconds = STUDY_TIME_SECONDS;
+            breakSeconds = BREAK_TIME_SECONDS;
+            currentMode = 'study';
+            hasStarted = false; // Reset to Neutral
+            updateUI();
         }
 
         // Initialize
-        updateDisplay();
+        updateUI();
+
     </script>
 </body>
 
