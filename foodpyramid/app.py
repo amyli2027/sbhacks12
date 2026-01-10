@@ -1,5 +1,5 @@
 import os
-import time # Added time for small sleep
+import time
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import requests
@@ -21,16 +21,21 @@ session.mount('https://', HTTPAdapter(max_retries=retries))
 def map_usda_category(usda_cat, name):
     cat = str(usda_cat).lower()
     name_lower = str(name).lower()
+    
+    # Junk / Processed / Beverages
     if "candy" in cat or "chocolate" in name_lower or "reeses" in name_lower or "snack" in cat: return "sweet"
     if "cookie" in name_lower or "pastry" in cat or "croissant" in name_lower or "cake" in name_lower: return "sweet"
-    if "soda" in name_lower or "beverage" in cat or "drink" in name_lower: return "sweet"
+    if "soda" in name_lower or "beverage" in cat or "drink" in name_lower or "juice" in name_lower: return "sweet"
     if "chips" in name_lower or "fries" in name_lower or "doritos" in name_lower: return "veg" 
+
+    # Standard
     if "fruit" in cat: return "fruit"
     if "vegetable" in cat or "pod" in cat: return "veg"
     if "beef" in cat or "pork" in cat or "poultry" in cat or "sausage" in cat or "fish" in cat or "egg" in cat: return "protein"
     if "cereal" in cat or "grain" in cat or "bread" in cat or "pasta" in cat: return "grain"
     if "dairy" in cat or "milk" in cat or "cheese" in cat or "yogurt" in cat: return "dairy"
     if "fats" in cat or "oil" in cat or "butter" in cat or "margarine" in cat: return "fat"
+    
     return "grain"
 
 @app.route('/api/search', methods=['GET'])
@@ -43,18 +48,19 @@ def search_food():
     payload = {
         "api_key": API_KEY,
         "query": query,
+        # We search ALL databases.
         "dataType": ["Foundation", "SR Legacy", "Branded", "Survey (FNDDS)"], 
-        "pageSize": 6
+        # FETCH 100 ITEMS (Maximum allowed page size)
+        # This ensures we dig deep enough to find 'Celery, raw' buried under 'Celery Soup'
+        "pageSize": 100
     }
 
     try:
-        # ATTEMPT 1
         r = session.get(BASE_URL, params=payload, timeout=20)
         
-        # AUTO-RETRY LOGIC: If it fails with 400 (Bad Request), try once more
+        # Auto-retry on 400 bad request error
         if r.status_code == 400:
-            print("⚠️ Initial 400 Error. Retrying automatically...")
-            time.sleep(0.5) # Short pause
+            time.sleep(0.5)
             r = session.get(BASE_URL, params=payload, timeout=20)
 
         if r.status_code != 200:
@@ -62,8 +68,10 @@ def search_food():
             return jsonify([]), 200
 
         data = r.json()
-        results = []
+        raw_foods = []
+        branded_foods = []
         
+        # PROCESS & SORT
         for item in data.get('foods', []):
             nutrients = {n['nutrientId']: n['value'] for n in item.get('foodNutrients', [])}
             protein = nutrients.get(203, 0)
@@ -73,6 +81,7 @@ def search_food():
 
             name = item.get('description')
             category = map_usda_category(item.get('foodCategory', ''), name)
+            data_type = item.get('dataType', '') 
             
             cooked_in = None
             special = None
@@ -84,7 +93,7 @@ def search_food():
             if "tallow" in lower_name or "raw milk" in lower_name or "grass-fed" in lower_name:
                 special = "rfk_bonus"
 
-            results.append({
+            food_obj = {
                 "name": name,
                 "category": category,
                 "protein_g": protein,
@@ -93,10 +102,22 @@ def search_food():
                 "calories": calories,
                 "cooked_in": cooked_in,
                 "special": special
-            })
+            }
 
-        print(f"✅ Found {len(results)} results.")
-        return jsonify(results)
+            # SORTING LOGIC UPDATE:
+            # "Survey (FNDDS)" is actually where most generic veggies (like "Celery, raw") live.
+            # We now include it in the "Good" list.
+            if data_type in ["SR Legacy", "Foundation", "Survey (FNDDS)"]:
+                raw_foods.append(food_obj)
+            else:
+                branded_foods.append(food_obj)
+
+        # Combine: Raw/Survey foods FIRST, then Branded foods
+        # We limit the final list sent to the browser to 20 so it's not overwhelming
+        final_results = (raw_foods + branded_foods)[:20]
+
+        print(f"✅ Found {len(final_results)} sorted results.")
+        return jsonify(final_results)
 
     except Exception as e:
         print(f"❌ SYSTEM ERROR: {e}")
