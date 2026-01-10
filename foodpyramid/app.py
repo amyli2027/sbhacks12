@@ -13,7 +13,6 @@ CORS(app)
 API_KEY = "pRAoUVvdllyd6skGURjLGBTuUf7jlKeBiN7Az3rQ"
 BASE_URL = "https://api.nal.usda.gov/fdc/v1/foods/search"
 
-# SESSION SETUP
 session = requests.Session()
 retries = Retry(total=3, backoff_factor=1, status_forcelist=[500, 502, 503, 504])
 session.mount('https://', HTTPAdapter(max_retries=retries))
@@ -22,20 +21,16 @@ def map_usda_category(usda_cat, name):
     cat = str(usda_cat).lower()
     name_lower = str(name).lower()
     
-    # Junk / Processed / Beverages
     if "candy" in cat or "chocolate" in name_lower or "reeses" in name_lower or "snack" in cat: return "sweet"
     if "cookie" in name_lower or "pastry" in cat or "croissant" in name_lower or "cake" in name_lower: return "sweet"
     if "soda" in name_lower or "beverage" in cat or "drink" in name_lower or "juice" in name_lower: return "sweet"
     if "chips" in name_lower or "fries" in name_lower or "doritos" in name_lower: return "veg" 
-
-    # Standard
     if "fruit" in cat: return "fruit"
     if "vegetable" in cat or "pod" in cat: return "veg"
     if "beef" in cat or "pork" in cat or "poultry" in cat or "sausage" in cat or "fish" in cat or "egg" in cat: return "protein"
     if "cereal" in cat or "grain" in cat or "bread" in cat or "pasta" in cat: return "grain"
     if "dairy" in cat or "milk" in cat or "cheese" in cat or "yogurt" in cat: return "dairy"
     if "fats" in cat or "oil" in cat or "butter" in cat or "margarine" in cat: return "fat"
-    
     return "grain"
 
 @app.route('/api/search', methods=['GET'])
@@ -43,11 +38,12 @@ def search_food():
     query = request.args.get('q')
     if not query: return jsonify({"error": "No query"}), 400
 
-    print(f"🔎 Searching USDA for: {query}...") 
+    print(f"🔎 Searching USDA for: {query.upper()}...") 
 
     payload = {
         "api_key": API_KEY,
-        "query": query.upper(), # <--- Forces "CELERY" (uppercase) automatically
+        # AUTO-CAPS FIX: Forces "CELERY" to help find vegetables
+        "query": query.upper(),
         "dataType": ["Foundation", "SR Legacy", "Branded", "Survey (FNDDS)"], 
         "pageSize": 100
     }
@@ -55,7 +51,6 @@ def search_food():
     try:
         r = session.get(BASE_URL, params=payload, timeout=20)
         
-        # Auto-retry on 400 bad request error
         if r.status_code == 400:
             time.sleep(0.5)
             r = session.get(BASE_URL, params=payload, timeout=20)
@@ -68,7 +63,6 @@ def search_food():
         raw_foods = []
         branded_foods = []
         
-        # PROCESS & SORT
         for item in data.get('foods', []):
             nutrients = {n['nutrientId']: n['value'] for n in item.get('foodNutrients', [])}
             protein = nutrients.get(203, 0)
@@ -101,18 +95,12 @@ def search_food():
                 "special": special
             }
 
-            # SORTING LOGIC UPDATE:
-            # "Survey (FNDDS)" is actually where most generic veggies (like "Celery, raw") live.
-            # We now include it in the "Good" list.
             if data_type in ["SR Legacy", "Foundation", "Survey (FNDDS)"]:
                 raw_foods.append(food_obj)
             else:
                 branded_foods.append(food_obj)
 
-        # Combine: Raw/Survey foods FIRST, then Branded foods
-        # We limit the final list sent to the browser to 20 so it's not overwhelming
         final_results = (raw_foods + branded_foods)[:20]
-
         print(f"✅ Found {len(final_results)} sorted results.")
         return jsonify(final_results)
 
