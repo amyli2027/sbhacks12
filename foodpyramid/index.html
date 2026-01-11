@@ -317,7 +317,9 @@
                 const data = await res.json();
                 suggestionsBox.innerHTML = '';
                 if (data && data.length > 0) {
-                    data.forEach(p => {
+                    // Sort by serving_g (weight) in ascending order
+                    const sortedData = [...data].sort((a, b) => (a.serving_g || 0) - (b.serving_g || 0));
+                    sortedData.forEach(p => {
                         const div = document.createElement('div');
                         div.className = 'suggestion-item';
                         // Show serving size in dropdown
