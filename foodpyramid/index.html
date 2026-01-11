@@ -11,6 +11,8 @@
             --card-bg: #ffffff;
             --primary: #2ecc71;
             --danger: #e74c3c;
+            --warning: #f39c12;
+            --success: #27ae60;
             --text: #2c3e50;
             --accent-92: #f1c40f;
             --accent-plate: #3498db;
@@ -51,14 +53,39 @@
             margin-top: 0;
         }
 
+        /* ALERTS */
         #global-alert-box {
-            background: #fee2e2;
-            border: 2px solid var(--danger);
-            color: #b91c1c;
-            padding: 15px;
-            border-radius: 12px;
-            margin-bottom: 25px;
             display: none;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .alert-item {
+            padding: 12px;
+            border-radius: 8px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .alert-danger {
+            background: #fee2e2;
+            border: 1px solid var(--danger);
+            color: #b91c1c;
+        }
+
+        .alert-warning {
+            background: #fef9c3;
+            border: 1px solid var(--warning);
+            color: #854d0e;
+        }
+
+        .alert-success {
+            background: #dcfce7;
+            border: 1px solid var(--success);
+            color: #166534;
         }
 
         /* Search & Inputs */
@@ -201,7 +228,6 @@
             font-weight: bold;
         }
 
-        /* Colors */
         .b-92 {
             border-color: var(--accent-92);
         }
@@ -225,6 +251,32 @@
         .b-rfk .score-val {
             color: var(--accent-rfk);
         }
+
+        /* Advice Box Styling */
+        #advice-box {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 12px;
+            border-left: 5px solid #34495e;
+            margin-bottom: 15px;
+        }
+
+        .advice-header {
+            font-weight: bold;
+            margin-bottom: 10px;
+            display: block;
+            color: #34495e;
+        }
+
+        .advice-list {
+            padding-left: 20px;
+            margin: 0;
+        }
+
+        .advice-list li {
+            margin-bottom: 5px;
+            color: #555;
+        }
     </style>
 </head>
 
@@ -245,10 +297,7 @@
         <div class="container" id="results-wrapper">
             <h1 id="res-title">📊 Verdict</h1>
 
-            <div id="global-alert-box">
-                <div class="alert-title">⚠️ ALERT</div>
-                <ul id="alert-content"></ul>
-            </div>
+            <div id="global-alert-box"></div>
 
             <div id="results-area">
 
@@ -273,15 +322,15 @@
                         <img src="foodpyramidimages/newfoodpyramid.png" id="img-rfk" alt="RFK Pyramid"
                             class="score-img">
                         <div class="score-info">
-                            <div class="score-title">RFK / Upside Down</div>
+                            <div class="score-title">RFK / MAHA</div>
                             <div class="score-val" id="s-rfk">0%</div>
                         </div>
                     </div>
                 </div>
 
-                <div id="advice-box"
-                    style="background:#f9f9f9; padding:15px; border-radius:10px; font-size:0.9rem; margin-bottom:15px;">
-                    Analyze a meal to see details.
+                <div id="advice-box">
+                    <span class="advice-header">💡 Recommendations:</span>
+                    <ul class="advice-list" id="advice-content"></ul>
                 </div>
 
                 <button class="btn restart-btn" onclick="resetApp()">Start Over</button>
@@ -293,8 +342,6 @@
     <script>
         // --- STATE ---
         let currentMeal = [];
-
-        // Removed hardcoded 'srv: 150'. Now we depend on backend data.
         const CONVERSIONS = { 'g': 1, 'oz': 28.35, 'cup': 200 };
 
         // --- API & LIST LOGIC ---
@@ -317,12 +364,9 @@
                 const data = await res.json();
                 suggestionsBox.innerHTML = '';
                 if (data && data.length > 0) {
-                    // Sort by serving_g (weight) in ascending order
-                    const sortedData = [...data].sort((a, b) => (a.serving_g || 0) - (b.serving_g || 0));
-                    sortedData.forEach(p => {
+                    data.forEach(p => {
                         const div = document.createElement('div');
                         div.className = 'suggestion-item';
-                        // Show serving size in dropdown
                         div.innerHTML = `<strong>${p.name}</strong> <small>(${p.category} | ${p.serving_g}g)</small>`;
                         div.onclick = () => addFood(p);
                         suggestionsBox.appendChild(div);
@@ -332,12 +376,11 @@
         }
 
         function addFood(p) {
-            // We now store the backend's serving size
             currentMeal.push({
                 ...p,
                 amount: 1,
                 unit: 'srv',
-                base_serving: p.serving_g || 100, // Important fix
+                base_serving: p.serving_g || 100,
                 macros: {
                     p: p.protein_g || 0,
                     f: p.fat_g || 0,
@@ -371,17 +414,17 @@
         function updateItem(i, f, v) { currentMeal[i][f] = parseFloat(v); }
         function removeItem(i) { currentMeal.splice(i, 1); renderList(); }
 
-        // --- ANALYSIS LOGIC ---
+        // --- IMPROVED ANALYSIS LOGIC ---
         function analyzeMeal() {
             if (currentMeal.length === 0) { alert("Add food first."); return; }
 
             // 1. Calc Totals
             let totalG = 0;
+            let totalCals = 0;
             let w = { grain: 0, veg: 0, fruit: 0, protein: 0, dairy: 0, fat: 0, sweet: 0, seed_oil: 0, rfk_bonus: 0 };
             let mac = { p: 0, f: 0, s: 0 };
 
             currentMeal.forEach(i => {
-                // MATH FIX: Calculate real grams based on unit selection
                 let grams = 0;
                 if (i.unit === 'srv') {
                     grams = (i.amount || 0) * i.base_serving;
@@ -391,18 +434,15 @@
 
                 totalG += grams;
 
-                // Track Category Weights
                 if (w[i.category] !== undefined) w[i.category] += grams;
-
-                // Track Special Items
-                if (i.cooked_in === 'seed_oil') w.seed_oil += grams * 0.2; // Assume 20% oil absorption
+                if (i.cooked_in === 'seed_oil') w.seed_oil += grams * 0.2;
                 if (i.special === 'rfk_bonus') w.rfk_bonus += grams;
 
-                // Track Macros (Data is per 100g)
                 const ratio = grams / 100;
                 mac.p += i.macros.p * ratio;
                 mac.f += i.macros.f * ratio;
                 mac.s += i.macros.s * ratio;
+                totalCals += i.macros.c * ratio;
             });
 
             if (totalG === 0) totalG = 1;
@@ -410,71 +450,82 @@
             // 2. Scores
             const p = {}; for (let k in w) p[k] = w[k] / totalG;
 
-            // 1992 Pyramid Logic
+            // 1992
             let s92 = 80;
-            if (p.grain > 0.3) s92 += 20; // Loves grains
-            if (p.fat > 0.1 || mac.f > 60) s92 -= 30; // Hates fat
+            if (p.grain > 0.3) s92 += 20;
+            if (p.fat > 0.1 || mac.f > 60) s92 -= 30;
 
-            // MyPlate Logic
+            // MyPlate
             let sPlate = 0;
             let plant = p.veg + p.fruit;
-            sPlate += (Math.min(plant, 0.5) / 0.5) * 50; // Wants 50% fruit/veg
+            sPlate += (Math.min(plant, 0.5) / 0.5) * 50;
             sPlate += (Math.min(p.protein + p.dairy, 0.25) / 0.25) * 25;
             sPlate += (Math.min(p.grain, 0.25) / 0.25) * 25;
             if (mac.s > 40) sPlate -= 20;
 
-            // RFK/MAHA Logic
+            // RFK Smart Score
             let sRFK = 95;
-            let rfkTips = [];
-
-            // Heavy penalties for Seed Oils and Sugar
-            if (w.seed_oil > 5) { sRFK -= 30; rfkTips.push("Contains Seed Oils"); }
-            if (mac.s > 25) { sRFK -= 25; rfkTips.push("High Sugar"); }
-
-            // Bonus for Tallow/Raw Milk
-            if (w.rfk_bonus > 0) { sRFK += 10; rfkTips.push("Good Fats Added"); }
-
-            // Penalize processed grains, reward protein
+            if (w.seed_oil > 5) sRFK -= 35;
+            if (mac.s > 25 && p.fruit < 0.2) sRFK -= 25; // Penalize sugar unless it's fruit
+            if (w.rfk_bonus > 0) sRFK += 10;
             if (p.grain > 0.4) sRFK -= 10;
-            if (p.protein > 0.25) sRFK += 5;
+            if (p.protein > 0.3) sRFK += 5;
 
-            // Clamp results 0-100
             const clamp = n => Math.min(100, Math.max(0, Math.round(n)));
+            const finalPlate = clamp(sPlate);
+            const finalRFK = clamp(sRFK);
 
-            // 3. Render Scores
+            // 3. UI Update
             document.getElementById('s-92').innerText = clamp(s92) + "%";
-            document.getElementById('s-plate').innerText = clamp(sPlate) + "%";
-            document.getElementById('s-rfk').innerText = clamp(sRFK) + "%";
+            document.getElementById('s-plate').innerText = finalPlate + "%";
+            document.getElementById('s-rfk').innerText = finalRFK + "%";
 
-            // 4. TRIGGER REACTION IMAGES
-            const plateImg = document.getElementById('img-plate');
-            if (sPlate < 50) {
-                plateImg.src = "reactionimg/angrymichelle.png";
-            } else {
-                plateImg.src = "reactionimg/happymichelle.png";
+            // 4. Reactions
+            document.getElementById('img-plate').src = finalPlate < 50 ? "reactionimg/angrymichelle.png" : "reactionimg/happymichelle.png";
+            document.getElementById('img-rfk').src = finalRFK < 50 ? "reactionimg/angry RFK.png" : "reactionimg/happyRFK.png";
+
+            // 5. GENERATE SMART ALERTS
+            const alertsBox = document.getElementById('global-alert-box');
+            alertsBox.innerHTML = '';
+            let hasAlerts = false;
+
+            function addAlert(msg, type) {
+                hasAlerts = true;
+                const div = document.createElement('div');
+                div.className = `alert-item alert-${type}`;
+                div.innerHTML = msg;
+                alertsBox.appendChild(div);
             }
 
-            const rfkImg = document.getElementById('img-rfk');
-            if (sRFK < 50) {
-                rfkImg.src = "reactionimg/angry RFK.png";
-            } else {
-                rfkImg.src = "reactionimg/happyRFK.png";
-            }
+            // Warning Alerts
+            if (w.seed_oil > 0) addAlert("⚠️ <b>STOP:</b> Contains Inflammatory Seed Oils (Corn/Soy/Canola)", "danger");
+            if (mac.s > 40 && p.fruit < 0.2) addAlert("🍭 <b>Sugar Spike:</b> High processed sugar content", "danger");
+            if (p.grain > 0.6) addAlert("🍞 <b>Carb Overload:</b> Very high grain content", "warning");
 
-            let tipText = rfkTips.length ? rfkTips.join(", ") : "Good clean meal.";
-            document.getElementById('advice-box').innerHTML = `<b>RFK Analysis:</b> ${tipText}`;
+            // Success Alerts
+            if (mac.p > 40) addAlert("💪 <b>Muscle Fuel:</b> Excellent protein source (>40g)", "success");
+            if (w.rfk_bonus > 0) addAlert("🧈 <b>Healthy Fats:</b> Contains Tallow / Raw Milk / Grass-fed", "success");
 
-            // Alerts
-            const alerts = [];
-            if (mac.s > 50) alerts.push(`🍬 High Sugar: ${mac.s.toFixed(0)}g`);
-            if (mac.p > 100) alerts.push(`🥩 High Protein: ${mac.p.toFixed(0)}g`);
+            alertsBox.style.display = hasAlerts ? 'flex' : 'none';
 
-            const alertBox = document.getElementById('global-alert-box');
-            if (alerts.length) {
-                alertBox.style.display = 'block';
-                document.getElementById('alert-content').innerHTML = alerts.map(a => `<li>${a}</li>`).join('');
-            } else { alertBox.style.display = 'none'; }
+            // 6. GENERATE ACTIONABLE RECOMMENDATIONS
+            const tips = [];
 
+            // Protein Advice
+            if (mac.p < 20) tips.push("Protein is very low. Consider adding eggs, beef, or fish.");
+            else if (mac.p < 40 && totalCals > 600) tips.push("Protein is a bit low for this calorie count.");
+
+            // Fat/Carb Advice
+            if (p.grain > 0.4) tips.push("Try swapping processed grains (bread/pasta) for potatoes or fruit.");
+            if (mac.f > 40 && w.seed_oil === 0) tips.push("Fat is high, but it looks like healthy fat (no seed oils). Keep it up.");
+
+            // Micronutrient Advice
+            if (p.fruit < 0.1 && p.veg < 0.1) tips.push("Lacking micronutrients. Add a side of fruit (RFK style) or veggies.");
+
+            // Default
+            if (tips.length === 0) tips.push("Great macro balance. No major changes needed.");
+
+            document.getElementById('advice-content').innerHTML = tips.map(t => `<li>${t}</li>`).join('');
             document.getElementById('results-area').style.display = 'block';
         }
 
