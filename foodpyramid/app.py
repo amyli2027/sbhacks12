@@ -18,19 +18,47 @@ retries = Retry(total=3, backoff_factor=1, status_forcelist=[500, 502, 503, 504]
 session.mount('https://', HTTPAdapter(max_retries=retries))
 
 def map_usda_category(usda_cat, name):
+    # 1. CLEAN UP STRINGS
     cat = str(usda_cat).lower()
     name_lower = str(name).lower()
     
-    if "candy" in cat or "chocolate" in name_lower or "reeses" in name_lower or "snack" in cat: return "sweet"
-    if "cookie" in name_lower or "pastry" in cat or "croissant" in name_lower or "cake" in name_lower: return "sweet"
-    if "soda" in name_lower or "beverage" in cat or "drink" in name_lower or "juice" in name_lower: return "sweet"
-    if "chips" in name_lower or "fries" in name_lower or "doritos" in name_lower: return "veg" 
-    if "fruit" in cat: return "fruit"
-    if "vegetable" in cat or "pod" in cat: return "veg"
-    if "beef" in cat or "pork" in cat or "poultry" in cat or "sausage" in cat or "fish" in cat or "egg" in cat: return "protein"
-    if "cereal" in cat or "grain" in cat or "bread" in cat or "pasta" in cat: return "grain"
-    if "dairy" in cat or "milk" in cat or "cheese" in cat or "yogurt" in cat: return "dairy"
-    if "fats" in cat or "oil" in cat or "butter" in cat or "margarine" in cat: return "fat"
+    # --- PHASE 1: CHECK OFFICIAL USDA CATEGORY FIRST (More Accurate) ---
+    
+    # SWEETS
+    if "candy" in cat or "sweets" in cat or "sugars" in cat or "chocolate" in cat: return "sweet"
+    if "beverages" in cat and ("sugar" in name_lower or "carbonated" in cat or "soda" in name_lower): return "sweet"
+    if "baked" in cat and ("cookie" in name_lower or "cake" in name_lower or "brownie" in name_lower or "pie" in name_lower): return "sweet"
+
+    # VEGETABLES
+    if "vegetable" in cat: return "veg"
+    
+    # FRUITS
+    if "fruit" in cat and "juice" not in cat: return "fruit" # Keep juice separate if you want
+
+    # DAIRY
+    if "milk" in cat or "dairy" in cat or "cheese" in cat or "yogurt" in cat: return "dairy"
+
+    # PROTEIN
+    if "beef" in cat or "pork" in cat or "poultry" in cat or "sausages" in cat or "meats" in cat or "fish" in cat or "egg" in cat or "seafood" in cat:
+        return "protein"
+
+    # GRAINS
+    if "grain" in cat or "cereal" in cat or "baked products" in cat or "pasta" in cat:
+        return "grain"
+    
+    # FATS
+    if "fats" in cat or "oils" in cat or "butter" in cat: return "fat"
+    if "nut" in cat and "butter" in name_lower: return "fat" # Peanut butter
+
+    # --- PHASE 2: FALLBACK TO NAME SEARCH (If Category was vague) ---
+    
+    if "berry" in name_lower or "apple" in name_lower or "banana" in name_lower or "grape" in name_lower: return "fruit"
+    if "spinach" in name_lower or "carrot" in name_lower or "corn" in name_lower or "broccoli" in name_lower: return "veg"
+    if "steak" in name_lower or "chicken" in name_lower or "burger" in name_lower: return "protein"
+    if "bread" in name_lower or "rice" in name_lower or "toast" in name_lower or "oat" in name_lower: return "grain"
+    if "soda" in name_lower or "coke" in name_lower: return "sweet"
+
+    # Default
     return "grain"
 
 @app.route('/api/search', methods=['GET'])
@@ -42,15 +70,14 @@ def search_food():
 
     payload = {
         "api_key": API_KEY,
-        # AUTO-CAPS FIX: Forces "CELERY" to help find vegetables
         "query": query.upper(),
+        # We need "Survey (FNDDS)" because it has the best category names like "Milk" or "Meat"
         "dataType": ["Foundation", "SR Legacy", "Branded", "Survey (FNDDS)"], 
-        "pageSize": 100
+        "pageSize": 50 
     }
 
     try:
         r = session.get(BASE_URL, params=payload, timeout=20)
-        
         if r.status_code == 400:
             time.sleep(0.5)
             r = session.get(BASE_URL, params=payload, timeout=20)
@@ -71,8 +98,12 @@ def search_food():
             calories = nutrients.get(208, 0)
 
             name = item.get('description')
-            category = map_usda_category(item.get('foodCategory', ''), name)
-            data_type = item.get('dataType', '') 
+            # HERE IS THE MAGIC: We fetch the official category now!
+            usda_cat = item.get('foodCategory', '') 
+            
+            category = map_usda_category(usda_cat, name)
+            
+            # ... (Rest of logic is same) ...
             
             cooked_in = None
             special = None
@@ -95,7 +126,7 @@ def search_food():
                 "special": special
             }
 
-            if data_type in ["SR Legacy", "Foundation", "Survey (FNDDS)"]:
+            if item.get('dataType') in ["SR Legacy", "Foundation", "Survey (FNDDS)"]:
                 raw_foods.append(food_obj)
             else:
                 branded_foods.append(food_obj)
