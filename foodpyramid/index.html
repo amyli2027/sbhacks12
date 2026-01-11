@@ -151,10 +151,6 @@
             background: var(--primary);
         }
 
-        .save-btn {
-            background: #34495e;
-        }
-
         .restart-btn {
             background: #95a5a6;
         }
@@ -181,12 +177,10 @@
             gap: 15px;
         }
 
-        /* Image Styling */
         .score-img {
             width: 80px;
             height: 80px;
             object-fit: contain;
-            /* Keeps aspect ratio */
             border-radius: 8px;
             background-color: #f9f9f9;
         }
@@ -298,7 +292,9 @@
     <script>
         // --- STATE ---
         let currentMeal = [];
-        const CONVERSIONS = { 'g': 1, 'oz': 28.35, 'lb': 453.6, 'cup': 200, 'srv': 150 };
+
+        // Removed hardcoded 'srv: 150'. Now we depend on backend data.
+        const CONVERSIONS = { 'g': 1, 'oz': 28.35, 'cup': 200 };
 
         // --- API & LIST LOGIC ---
         const input = document.getElementById('food-input');
@@ -323,7 +319,8 @@
                     data.forEach(p => {
                         const div = document.createElement('div');
                         div.className = 'suggestion-item';
-                        div.innerHTML = `<strong>${p.name}</strong> <small>(${p.category})</small>`;
+                        // Show serving size in dropdown
+                        div.innerHTML = `<strong>${p.name}</strong> <small>(${p.category} | ${p.serving_g}g)</small>`;
                         div.onclick = () => addFood(p);
                         suggestionsBox.appendChild(div);
                     });
@@ -332,7 +329,19 @@
         }
 
         function addFood(p) {
-            currentMeal.push({ ...p, amount: 1, unit: 'srv', macros: { p: p.protein_g || 0, f: p.fat_g || 0, s: p.sugar_g || 0, c: p.calories || 0 } });
+            // We now store the backend's serving size
+            currentMeal.push({
+                ...p,
+                amount: 1,
+                unit: 'srv',
+                base_serving: p.serving_g || 100, // Important fix
+                macros: {
+                    p: p.protein_g || 0,
+                    f: p.fat_g || 0,
+                    s: p.sugar_g || 0,
+                    c: p.calories || 0
+                }
+            });
             input.value = ''; suggestionsBox.style.display = 'none'; renderList();
         }
 
@@ -346,7 +355,9 @@
                 <div><b>${item.name}</b><br><small>${item.category}</small></div>
                 <input type="number" class="row-input" value="${item.amount}" oninput="updateItem(${i}, 'amount', this.value)">
                 <select class="row-input" onchange="updateItem(${i}, 'unit', this.value)">
-                    <option value="srv">srv</option><option value="g">g</option><option value="oz">oz</option>
+                    <option value="srv">srv (${item.base_serving}g)</option>
+                    <option value="g">grams</option>
+                    <option value="oz">oz</option>
                 </select>
                 <div class="remove-btn" onclick="removeItem(${i})">✕</div>
             `;
@@ -367,51 +378,78 @@
             let mac = { p: 0, f: 0, s: 0 };
 
             currentMeal.forEach(i => {
-                const g = (i.amount || 0) * CONVERSIONS[i.unit];
-                totalG += g;
-                if (w[i.category] !== undefined) w[i.category] += g;
-                if (i.cooked_in === 'seed_oil') w.seed_oil += g * 0.2;
-                if (i.special === 'rfk_bonus') w.rfk_bonus += g;
-                mac.p += (i.macros.p / 100) * g; mac.f += (i.macros.f / 100) * g; mac.s += (i.macros.s / 100) * g;
+                // MATH FIX: Calculate real grams based on unit selection
+                let grams = 0;
+                if (i.unit === 'srv') {
+                    grams = (i.amount || 0) * i.base_serving;
+                } else {
+                    grams = (i.amount || 0) * CONVERSIONS[i.unit];
+                }
+
+                totalG += grams;
+
+                // Track Category Weights
+                if (w[i.category] !== undefined) w[i.category] += grams;
+
+                // Track Special Items
+                if (i.cooked_in === 'seed_oil') w.seed_oil += grams * 0.2; // Assume 20% oil absorption
+                if (i.special === 'rfk_bonus') w.rfk_bonus += grams;
+
+                // Track Macros (Data is per 100g)
+                const ratio = grams / 100;
+                mac.p += i.macros.p * ratio;
+                mac.f += i.macros.f * ratio;
+                mac.s += i.macros.s * ratio;
             });
+
             if (totalG === 0) totalG = 1;
 
             // 2. Scores
             const p = {}; for (let k in w) p[k] = w[k] / totalG;
 
-            // 92
+            // 1992 Pyramid Logic
             let s92 = 80;
-            if (p.grain > 0.3) s92 += 20;
-            if (p.fat > 0.1 || mac.f > 80) s92 -= 30;
+            if (p.grain > 0.3) s92 += 20; // Loves grains
+            if (p.fat > 0.1 || mac.f > 60) s92 -= 30; // Hates fat
 
-            // Plate
+            // MyPlate Logic
             let sPlate = 0;
             let plant = p.veg + p.fruit;
-            sPlate += (Math.min(plant, 0.5) / 0.5) * 50;
+            sPlate += (Math.min(plant, 0.5) / 0.5) * 50; // Wants 50% fruit/veg
             sPlate += (Math.min(p.protein + p.dairy, 0.25) / 0.25) * 25;
             sPlate += (Math.min(p.grain, 0.25) / 0.25) * 25;
             if (mac.s > 40) sPlate -= 20;
 
-            // RFK
-            let sRFK = 90;
+            // RFK/MAHA Logic
+            let sRFK = 95;
             let rfkTips = [];
-            if (w.seed_oil > 5) { sRFK -= 30; rfkTips.push("Contains Seed Oils"); }
-            if (mac.s > 30) { sRFK -= 30; rfkTips.push("High Sugar"); }
-            if (w.rfk_bonus > 0) { sRFK += 10; rfkTips.push("Good Tallow/Raw Milk"); }
 
-            // Clamp
+            // Heavy penalties for Seed Oils and Sugar
+            if (w.seed_oil > 5) { sRFK -= 30; rfkTips.push("Contains Seed Oils"); }
+            if (mac.s > 25) { sRFK -= 25; rfkTips.push("High Sugar"); }
+
+            // Bonus for Tallow/Raw Milk
+            if (w.rfk_bonus > 0) { sRFK += 10; rfkTips.push("Good Fats Added"); }
+
+            // Penalize processed grains, reward protein
+            if (p.grain > 0.4) sRFK -= 10;
+            if (p.protein > 0.25) sRFK += 5;
+
+            // Clamp results 0-100
             const clamp = n => Math.min(100, Math.max(0, Math.round(n)));
 
             // 3. Render UI
             document.getElementById('s-92').innerText = clamp(s92) + "%";
             document.getElementById('s-plate').innerText = clamp(sPlate) + "%";
             document.getElementById('s-rfk').innerText = clamp(sRFK) + "%";
-            document.getElementById('advice-box').innerHTML = `<b>RFK Analysis:</b> ${rfkTips.length ? rfkTips.join(", ") : "Good meal."}`;
+
+            let tipText = rfkTips.length ? rfkTips.join(", ") : "Good clean meal.";
+            document.getElementById('advice-box').innerHTML = `<b>RFK Analysis:</b> ${tipText}`;
 
             // Alerts
             const alerts = [];
-            if (mac.s > 75) alerts.push(`🍬 Sugar Alert: ${mac.s.toFixed(0)}g`);
-            if (mac.p > 200) alerts.push(`🥩 Protein Alert: ${mac.p.toFixed(0)}g`);
+            if (mac.s > 50) alerts.push(`🍬 High Sugar: ${mac.s.toFixed(0)}g`);
+            if (mac.p > 100) alerts.push(`🥩 High Protein: ${mac.p.toFixed(0)}g`);
 
             const alertBox = document.getElementById('global-alert-box');
             if (alerts.length) {

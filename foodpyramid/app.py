@@ -18,121 +18,144 @@ retries = Retry(total=3, backoff_factor=1, status_forcelist=[500, 502, 503, 504]
 session.mount('https://', HTTPAdapter(max_retries=retries))
 
 def map_usda_category(usda_cat, name):
-    # 1. CLEAN UP STRINGS
     cat = str(usda_cat).lower()
-    name_lower = str(name).lower()
+    name = str(name).lower()
     
-    # --- PHASE 1: CHECK OFFICIAL USDA CATEGORY FIRST (More Accurate) ---
-    
-    # SWEETS
-    if "candy" in cat or "sweets" in cat or "sugars" in cat or "chocolate" in cat: return "sweet"
-    if "beverages" in cat and ("sugar" in name_lower or "carbonated" in cat or "soda" in name_lower): return "sweet"
-    if "baked" in cat and ("cookie" in name_lower or "cake" in name_lower or "brownie" in name_lower or "pie" in name_lower): return "sweet"
+    # --- PHASE 1: THE "JUNK" FILTER (Highest Priority) ---
+    # We check this FIRST so "Strawberry Cake" becomes SWEET, not Fruit.
+    junk_keywords = [
+        "candy", "chocolate", "cake", "cookie", "pie", "brownie", "ice cream",
+        "pudding", "dessert", "snack", "syrup", "jam", "jelly", "soda", 
+        "soft drink", "cola", "donut", "muffin", "pastry", "frosting"
+    ]
+    if any(k in name for k in junk_keywords) or any(k in cat for k in junk_keywords):
+        return "sweet"
 
-    # VEGETABLES
-    if "vegetable" in cat: return "veg"
+    # --- PHASE 2: EXPLICIT REAL FOODS (Override USDA Categories) ---
+    # Check specifically for common whole foods to prevent "Grain/Veg" errors
     
     # FRUITS
-    if "fruit" in cat and "juice" not in cat: return "fruit" # Keep juice separate if you want
+    fruit_keywords = [
+        "strawberry", "strawberries", "apple", "banana", "blueberry", "raspberries", 
+        "blackberry", "grape", "melon", "watermelon", "citrus", "orange", 
+        "peach", "pear", "mango", "pineapple", "cherry", "fruit"
+    ]
+    if any(k in name for k in fruit_keywords):
+        return "fruit"
+        
+    # VEGETABLES
+    veg_keywords = [
+        "broccoli", "spinach", "kale", "lettuce", "salad", "carrot", "onion", 
+        "pepper", "tomato", "cucumber", "celery", "asparagus", "cauliflower", 
+        "cabbage", "vegetable", "corn", "potato", "bean", "pea"
+    ]
+    if any(k in name for k in veg_keywords):
+        return "veg"
 
-    # DAIRY
-    if "milk" in cat or "dairy" in cat or "cheese" in cat or "yogurt" in cat: return "dairy"
-
-    # PROTEIN
-    if "beef" in cat or "pork" in cat or "poultry" in cat or "sausages" in cat or "meats" in cat or "fish" in cat or "egg" in cat or "seafood" in cat:
+    # PROTEINS
+    prot_keywords = [
+        "beef", "steak", "chicken", "turkey", "pork", "ham", "bacon", "sausage", 
+        "egg", "fish", "salmon", "tuna", "shrimp", "seafood", "meat", "burger"
+    ]
+    if any(k in name for k in prot_keywords):
         return "protein"
 
-    # GRAINS
-    if "grain" in cat or "cereal" in cat or "baked products" in cat or "pasta" in cat:
-        return "grain"
+    # --- PHASE 3: USDA CATEGORY FALLBACK (If name didn't match above) ---
+    if "dairy" in cat or "milk" in cat or "cheese" in cat or "yogurt" in cat: return "dairy"
+    if "grain" in cat or "cereal" in cat or "pasta" in cat or "bread" in cat: return "grain"
+    if "fat" in cat or "oil" in cat or "butter" in cat: return "fat"
     
-    # FATS
-    if "fats" in cat or "oils" in cat or "butter" in cat: return "fat"
-    if "nut" in cat and "butter" in name_lower: return "fat" # Peanut butter
+    # Specific Name Fallbacks for things missed
+    if "rice" in name or "oat" in name or "toast" in name or "bread" in name: return "grain"
+    if "butter" in name or "oil" in name or "margerine" in name: return "fat"
+    if "milk" in name or "cheese" in name or "cream" in name: return "dairy"
 
-    # --- PHASE 2: FALLBACK TO NAME SEARCH (If Category was vague) ---
-    
-    if "berry" in name_lower or "apple" in name_lower or "banana" in name_lower or "grape" in name_lower: return "fruit"
-    if "spinach" in name_lower or "carrot" in name_lower or "corn" in name_lower or "broccoli" in name_lower: return "veg"
-    if "steak" in name_lower or "chicken" in name_lower or "burger" in name_lower: return "protein"
-    if "bread" in name_lower or "rice" in name_lower or "toast" in name_lower or "oat" in name_lower: return "grain"
-    if "soda" in name_lower or "coke" in name_lower: return "sweet"
-
-    # Default
+    # Default to grain if we are totally lost (avoids crashing)
     return "grain"
+
+def get_nutrient(nutrient_list, *ids):
+    """Helper to find a nutrient value checking multiple possible IDs"""
+    for n in nutrient_list:
+        if n['nutrientId'] in ids:
+            return n['value']
+    return 0
 
 @app.route('/api/search', methods=['GET'])
 def search_food():
     query = request.args.get('q')
     if not query: return jsonify({"error": "No query"}), 400
 
-    print(f"🔎 Searching USDA for: {query.upper()}...") 
+    print(f"🔎 Searching USDA for: {query}...") 
 
+    # We send dataType as a comma-separated string to prevent 400 errors
     payload = {
         "api_key": API_KEY,
-        "query": query.upper(),
-        # We need "Survey (FNDDS)" because it has the best category names like "Milk" or "Meat"
-        "dataType": ["Foundation", "SR Legacy", "Branded", "Survey (FNDDS)"], 
-        "pageSize": 50 
+        "query": query,
+        "dataType": "Foundation,SR Legacy,Branded,Survey (FNDDS)",
+        "pageSize": 25
     }
 
     try:
-        r = session.get(BASE_URL, params=payload, timeout=20)
-        if r.status_code == 400:
-            time.sleep(0.5)
-            r = session.get(BASE_URL, params=payload, timeout=20)
+        r = session.get(BASE_URL, params=payload, timeout=10)
+        
+        # Fallback to generic search if strict search fails
+        if r.status_code != 200:
+            print(f"⚠️ Specific search failed ({r.status_code}). Removing filters...")
+            payload.pop("dataType") 
+            time.sleep(1)
+            r = session.get(BASE_URL, params=payload, timeout=10)
 
         if r.status_code != 200:
-            print(f"❌ API ERROR: {r.status_code}")
+            print(f"❌ API FAILURE: {r.status_code} - {r.text}")
             return jsonify([]), 200
 
         data = r.json()
-        raw_foods = []
-        branded_foods = []
+        final_results = []
         
         for item in data.get('foods', []):
-            nutrients = {n['nutrientId']: n['value'] for n in item.get('foodNutrients', [])}
-            protein = nutrients.get(203, 0)
-            fat = nutrients.get(204, 0)
-            sugar = nutrients.get(269, nutrients.get(2000, 0))
-            calories = nutrients.get(208, 0)
+            n_list = item.get('foodNutrients', [])
+            
+            # Legacy vs Foundation ID checks
+            protein = get_nutrient(n_list, 203, 1003)
+            fat = get_nutrient(n_list, 204, 1004)
+            calories = get_nutrient(n_list, 208, 1008)
+            sugar = get_nutrient(n_list, 269, 2000)
 
+            srv_g = item.get('servingSize', 100)
+            
             name = item.get('description')
-            # HERE IS THE MAGIC: We fetch the official category now!
-            usda_cat = item.get('foodCategory', '') 
+            cat_str = item.get('foodCategory', '')
             
-            category = map_usda_category(usda_cat, name)
-            
-            # ... (Rest of logic is same) ...
-            
+            # --- APPLY NEW CATEGORY LOGIC ---
+            category = map_usda_category(cat_str, name)
+
+            # Special Checks
             cooked_in = None
             special = None
-            lower_name = name.lower()
-            ingredients = item.get('ingredients', '').lower()
-            
-            if "soybean" in ingredients or "canola" in ingredients or "sunflower" in ingredients or "corn oil" in ingredients:
+            ing = item.get('ingredients', '').lower()
+            name_lower = name.lower()
+
+            if any(x in ing for x in ["soybean", "canola", "corn oil", "sunflower"]):
                 cooked_in = "seed_oil"
-            if "tallow" in lower_name or "raw milk" in lower_name or "grass-fed" in lower_name:
+            
+            if "tallow" in name_lower or "grass-fed" in name_lower or "raw milk" in name_lower:
                 special = "rfk_bonus"
 
-            food_obj = {
-                "name": name,
-                "category": category,
-                "protein_g": protein,
-                "fat_g": fat,
-                "sugar_g": sugar,
-                "calories": calories,
-                "cooked_in": cooked_in,
-                "special": special
-            }
+            # Filter out empty entries
+            if calories > 0 or protein > 0:
+                final_results.append({
+                    "name": name,
+                    "category": category,
+                    "protein_g": protein,
+                    "fat_g": fat,
+                    "sugar_g": sugar,
+                    "calories": calories,
+                    "cooked_in": cooked_in,
+                    "special": special,
+                    "serving_g": srv_g 
+                })
 
-            if item.get('dataType') in ["SR Legacy", "Foundation", "Survey (FNDDS)"]:
-                raw_foods.append(food_obj)
-            else:
-                branded_foods.append(food_obj)
-
-        final_results = (raw_foods + branded_foods)[:20]
-        print(f"✅ Found {len(final_results)} sorted results.")
+        print(f"✅ Found {len(final_results)} results for '{query}'.")
         return jsonify(final_results)
 
     except Exception as e:
