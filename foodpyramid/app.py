@@ -34,14 +34,30 @@ def map_usda_category(usda_cat, name):
     # --- PHASE 2: EXPLICIT REAL FOODS (Override USDA Categories) ---
     # Check specifically for common whole foods to prevent "Grain/Veg" errors
     
+    # PROTEINS
+    prot_keywords = [
+        "beef", "steak", "chicken", "turkey", "pork", "ham", "bacon", "sausage", 
+        "egg", "fish", "salmon", "tuna", "shrimp", "seafood", "meat", "burger"
+    ]
+    if any(k in name for k in prot_keywords):
+        return "protein"
+    
     # FRUITS
     fruit_keywords = [
         "strawberry", "strawberries", "apple", "banana", "blueberry", "raspberries", 
         "blackberry", "grape", "melon", "watermelon", "citrus", "orange", 
-        "peach", "pear", "mango", "pineapple", "cherry", "fruit"
+        "peach", "pear", "mango", "pineapple", "cherry", "fruit, berry, berries"
     ]
     if any(k in name for k in fruit_keywords):
         return "fruit"
+    
+    grain_keywords = [
+        "bread", "toast", "bagel", "roll", "bun", "croissant", "pancake", "waffle",
+        "pasta", "spaghetti", "macaroni", "noodle", "ramen", "rice", "oat", "grain",
+        "cereal", "flour", "tortilla", "biscuit", "pizza", "sandwich"
+    ]
+    if any(k in name for k in grain_keywords):
+        return "grain"
         
     # VEGETABLES
     veg_keywords = [
@@ -51,14 +67,6 @@ def map_usda_category(usda_cat, name):
     ]
     if any(k in name for k in veg_keywords):
         return "veg"
-
-    # PROTEINS
-    prot_keywords = [
-        "beef", "steak", "chicken", "turkey", "pork", "ham", "bacon", "sausage", 
-        "egg", "fish", "salmon", "tuna", "shrimp", "seafood", "meat", "burger"
-    ]
-    if any(k in name for k in prot_keywords):
-        return "protein"
 
     # --- PHASE 3: USDA CATEGORY FALLBACK (If name didn't match above) ---
     if "dairy" in cat or "milk" in cat or "cheese" in cat or "yogurt" in cat: return "dairy"
